@@ -1,0 +1,15 @@
+artifact_uri: file:///Users/pedrobarrera/amq2-service-ml-1/notebook_experiments/mlruns/0/84ce21ba08be4f7f8ecfc461a4dcb44a/artifacts
+end_time: 1743973461809
+entry_point_name: ''
+experiment_id: '0'
+lifecycle_stage: active
+run_id: 84ce21ba08be4f7f8ecfc461a4dcb44a
+run_name: defiant-swan-606
+run_uuid: 84ce21ba08be4f7f8ecfc461a4dcb44a
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1743973461783
+status: 3
+tags: []
+user_id: pedrobarrera

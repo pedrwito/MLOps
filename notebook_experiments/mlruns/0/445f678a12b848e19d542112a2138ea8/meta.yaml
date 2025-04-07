@@ -1,0 +1,15 @@
+artifact_uri: file:///Users/pedrobarrera/amq2-service-ml-1/notebook_experiments/mlruns/0/445f678a12b848e19d542112a2138ea8/artifacts
+end_time: 1743807795703
+entry_point_name: ''
+experiment_id: '0'
+lifecycle_stage: active
+run_id: 445f678a12b848e19d542112a2138ea8
+run_name: amusing-cod-559
+run_uuid: 445f678a12b848e19d542112a2138ea8
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1743807795565
+status: 4
+tags: []
+user_id: pedrobarrera

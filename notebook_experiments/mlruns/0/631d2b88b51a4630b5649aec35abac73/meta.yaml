@@ -1,0 +1,15 @@
+artifact_uri: file:///Users/pedrobarrera/amq2-service-ml-1/notebook_experiments/mlruns/0/631d2b88b51a4630b5649aec35abac73/artifacts
+end_time: 1743807779108
+entry_point_name: ''
+experiment_id: '0'
+lifecycle_stage: active
+run_id: 631d2b88b51a4630b5649aec35abac73
+run_name: polite-hare-693
+run_uuid: 631d2b88b51a4630b5649aec35abac73
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1743807779100
+status: 3
+tags: []
+user_id: pedrobarrera
