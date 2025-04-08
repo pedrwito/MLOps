@@ -4,9 +4,35 @@ import matplotlib.pyplot as plt
 
 from sklearn.feature_selection import mutual_info_classif
 
-def plot_histograms():
+def plot_histograms(data, col, save_path=None):
 
-        # Grabamos el gráfico si save_path es especificado
+    classes = data['class'].unique()
+
+
+    fig = plt.figure(figsize=(8, 6))
+
+    # Plot histograms for each class
+    for cls in classes:
+        subset = data[data['class'] == cls]
+        if col == 'redshift':
+            plt.hist(subset[col], bins=50, alpha=0.5, label=f"Class {cls}", density = False)
+        else:
+            plt.hist(subset[col], bins=50, alpha=0.5, label=f"Class {cls}", density = True)
+
+    plt.title(f"Histogram of {col} by Class")
+    plt.xlabel(col)
+    plt.ylabel("Frequency")
+    if col == 'u':
+        plt.xlim(0, 50)
+    elif col == 'g':
+        plt.xlim(0, 50)
+    elif col == 'z':
+        plt.xlim(0, 50)
+    elif col == 'redshift':
+        plt.xlim(-1, 5)
+    plt.legend()
+
+    # Grabamos el gráfico si save_path es especificado
     if save_path:
         plt.savefig(save_path, format="png", dpi=600)
 
@@ -14,6 +40,7 @@ def plot_histograms():
     plt.close(fig)
 
     return fig
+
 def plot_correlation_with_target(X, y, target_col="num", save_path=None):
     """
     Plots the correlation of each variable in the dataframe with the target column.
