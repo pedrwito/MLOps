@@ -5,8 +5,8 @@ from airflow.decorators import dag, task
 markdown_text = """
 ### EL Process for Star Clasification
 
-This DAG extracts information from the original CSV file stored in the kaggle repository.
-It preprocesses the data by creating dummy variables and scaling numerical features and saves it into a S3 bucket.
+This DAG extracts information from the original CSV file stored in the kaggle repository https://www.kaggle.com/datasets/fedesoriano/stellar-classification-dataset-sdss17.
+It extracts the data and stores it into an S3 bucket.
 """
 
 
