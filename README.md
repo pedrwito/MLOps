@@ -1,5 +1,10 @@
 # Implementación de un Modelo Productivo para Detección Estelar
 
+##Integrantes: 
+
+*   Pedro Lucas Barrera - a1801
+*   Lautaro Gabriel Medina - a1813
+
 En este trabajo se realizará la implementación de un modelo productivo para la empresa **ML Models and something more Inc.** enfocado en la detección categórica para determinar si el objeto detectado por un telescopio corresponde a una **estrella**, **galaxia** o **quásar**. 
 Para esto se utiliza el dataset de clasificación estelar **Stellar Classification Dataset SDSS17** disponible en [@https://www.kaggle.com/datasets/fedesoriano/stellar-classification-dataset-sdss17](https://www.kaggle.com/datasets/fedesoriano/stellar-classification-dataset-sdss17).
 La detección se basa en un modelo de clasificación entrenado para asignar cada objeto a una de estas tres categorías. Se simula la obtención de nuevos datos cada semana y se prueba el reentrenamiento del modelo en cada ciclo para evaluar mejoras basadas en la métrica de accuracy.
