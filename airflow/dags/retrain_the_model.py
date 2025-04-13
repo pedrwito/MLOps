@@ -3,15 +3,15 @@ import datetime
 from airflow.decorators import dag, task
 
 markdown_text = """
-### Re-Train the Model for Heart Disease Data
+### Re-Train the Model for Star Classification
 
 This DAG re-trains the model based on new data, tests the previous model, and put in production the new one 
-if it performs  better than the old one. It uses the F1 score to evaluate the model with the test data.
+if it performs better than the old one. It uses the accuracy to evaluate the model with the test data.
 
 """
 
 default_args = {
-    'owner': "Facundo Adrian Lucianna",
+    'owner': "ML Models and something more Inc.",
     'depends_on_past': False,
     'schedule_interval': None,
     'retries': 1,
@@ -24,7 +24,7 @@ default_args = {
     description="Re-train the model based on new data, tests the previous model, and put in production the new one if "
                 "it performs better than the old one",
     doc_md=markdown_text,
-    tags=["Re-Train", "Heart Disease"],
+    tags=["Re-Train", "Star Classification"],
     default_args=default_args,
     catchup=False,
 )
@@ -43,14 +43,14 @@ def processing_dag():
         import awswrangler as wr
 
         from sklearn.base import clone
-        from sklearn.metrics import f1_score
+        from sklearn.metrics import accuracy_score
         from mlflow.models import infer_signature
 
-        mlflow.set_tracking_uri('http://mlflow:5000')
+        mlflow.set_tracking_uri('http://mlflow:5001')
 
         def load_the_champion_model():
 
-            model_name = "heart_disease_model_prod"
+            model_name = "star_classification_model_prod"
             alias = "champion"
 
             client = mlflow.MlflowClient()
@@ -61,21 +61,21 @@ def processing_dag():
             return champion_version
 
         def load_the_train_test_data():
-            X_train = wr.s3.read_csv("s3://data/final/train/heart_X_train.csv")
-            y_train = wr.s3.read_csv("s3://data/final/train/heart_y_train.csv")
-            X_test = wr.s3.read_csv("s3://data/final/test/heart_X_test.csv")
-            y_test = wr.s3.read_csv("s3://data/final/test/heart_y_test.csv")
+            X_train = wr.s3.read_csv("s3://data/final/train/X_train.csv")
+            y_train = wr.s3.read_csv("s3://data/final/train/y_train.csv")
+            X_test = wr.s3.read_csv("s3://data/final/test/h_X_test.csv")
+            y_test = wr.s3.read_csv("s3://data/final/test/y_test.csv")
 
             return X_train, y_train, X_test, y_test
 
         def mlflow_track_experiment(model, X):
 
             # Track the experiment
-            experiment = mlflow.set_experiment("Heart Disease")
+            experiment = mlflow.set_experiment("Star Classification")
 
             mlflow.start_run(run_name='Challenger_run_' + datetime.datetime.today().strftime('%Y/%m/%d-%H:%M:%S"'),
                              experiment_id=experiment.experiment_id,
-                             tags={"experiment": "challenger models", "dataset": "Heart disease"},
+                             tags={"experiment": "challenger models", "dataset": "Star Classification"},
                              log_system_metrics=True)
 
             params = model.get_params()
@@ -93,22 +93,22 @@ def processing_dag():
                 artifact_path=artifact_path,
                 signature=signature,
                 serialization_format='cloudpickle',
-                registered_model_name="heart_disease_model_dev",
+                registered_model_name="star_classification_model_dev",
                 metadata={"model_data_version": 1}
             )
 
             # Obtain the model URI
             return mlflow.get_artifact_uri(artifact_path)
 
-        def register_challenger(model, f1_score, model_uri):
+        def register_challenger(model, accuracy, model_uri):
 
             client = mlflow.MlflowClient()
-            name = "heart_disease_model_prod"
+            name = "star_classification_model_prod"
 
             # Save the model params as tags
             tags = model.get_params()
             tags["model"] = type(model).__name__
-            tags["f1-score"] = f1_score
+            tags["accuracy"] = accuracy
 
             # Save the version of the model
             result = client.create_model_version(
@@ -135,13 +135,13 @@ def processing_dag():
 
         # Obtain the metric of the model
         y_pred = challenger_model.predict(X_test)
-        f1_score = f1_score(y_test.to_numpy().ravel(), y_pred)
+        accuracy = accuracy_score(y_test.to_numpy().ravel(), y_pred)
 
         # Track the experiment
         artifact_uri = mlflow_track_experiment(challenger_model, X_train)
 
         # Record the model
-        register_challenger(challenger_model, f1_score, artifact_uri)
+        register_challenger(challenger_model, accuracy, artifact_uri)
 
 
     @task.virtualenv(
@@ -155,12 +155,12 @@ def processing_dag():
         import mlflow
         import awswrangler as wr
 
-        from sklearn.metrics import f1_score
+        from sklearn.metrics import accuracy_score
 
         mlflow.set_tracking_uri('http://mlflow:5000')
 
         def load_the_model(alias):
-            model_name = "heart_disease_model_prod"
+            model_name = "star_classification_model_prod"
 
             client = mlflow.MlflowClient()
             model_data = client.get_model_version_by_alias(model_name, alias)
@@ -209,27 +209,27 @@ def processing_dag():
 
         # Obtain the metric of the models
         y_pred_champion = champion_model.predict(X_test)
-        f1_score_champion = f1_score(y_test.to_numpy().ravel(), y_pred_champion)
+        accuracy_champion = accuracy_score(y_test.to_numpy().ravel(), y_pred_champion)
 
         y_pred_challenger = challenger_model.predict(X_test)
-        f1_score_challenger = f1_score(y_test.to_numpy().ravel(), y_pred_challenger)
+        accuracy_challenger = accuracy_score(y_test.to_numpy().ravel(), y_pred_challenger)
 
-        experiment = mlflow.set_experiment("Heart Disease")
+        experiment = mlflow.set_experiment("Star Classification")
 
         # Obtain the last experiment run_id to log the new information
         list_run = mlflow.search_runs([experiment.experiment_id], output_format="list")
 
         with mlflow.start_run(run_id=list_run[0].info.run_id):
-            mlflow.log_metric("test_f1_challenger", f1_score_challenger)
-            mlflow.log_metric("test_f1_champion", f1_score_champion)
+            mlflow.log_metric("test_accuracy_challenger", accuracy_challenger)
+            mlflow.log_metric("test_accuracy_champion", accuracy_champion)
 
-            if f1_score_challenger > f1_score_champion:
+            if accuracy_challenger > accuracy_champion:
                 mlflow.log_param("Winner", 'Challenger')
             else:
                 mlflow.log_param("Winner", 'Champion')
 
-        name = "heart_disease_model_prod"
-        if f1_score_challenger > f1_score_champion:
+        name = "star_classification_model_prod"
+        if accuracy_challenger > accuracy_champion:
             promote_challenger(name)
         else:
             demote_challenger(name)
