@@ -3,7 +3,7 @@ import datetime
 from airflow.decorators import dag, task
 
 markdown_text = """
-### EL Process for Star Clasification
+### EL Process for Star Classification
 
 This DAG extracts information from the original CSV file stored in the kaggle repository https://www.kaggle.com/datasets/fedesoriano/stellar-classification-dataset-sdss17.
 It extracts the data and stores it into an S3 bucket.
@@ -21,8 +21,8 @@ default_args = {
 
 
 @dag(
-    dag_id="el_star_clasification_data",
-    description="EL process for star clasification data, retrieving it from kaggle and loading it into s3",
+    dag_id="el_star_classification_data",
+    description="EL process for star classification data, retrieving it from kaggle and loading it into s3",
     doc_md=markdown_text,
     tags=["EL", "Star Classification"],
     default_args=default_args,
@@ -38,16 +38,16 @@ def process_el_star_data():
     )
     def get_data():
         """
-        Load the raw data from UCI repository
+        Load the raw data from kaggle repository
         """
         import awswrangler as wr
         from ucimlrepo import fetch_ucirepo
         from airflow.models import Variable
-
+        
         # fetch dataset
         heart_disease = fetch_ucirepo(id=45)
 
-        data_path = "s3://data/raw/heart.csv"
+        data_path = "s3://data/raw/star_classification.csv"
         dataframe = heart_disease.data.original
 
         target_col = Variable.get("target_col_heart")
@@ -76,8 +76,8 @@ def process_el_star_data():
         import numpy as np
 
 
-        data_original_path = "s3://data/raw/heart.csv"
-        data_end_path = "s3://data/raw/heart_dummies.csv"
+        data_original_path = "s3://data/raw/star_classification.csv"
+        data_end_path = "s3://data/raw/star_classification_filtered.csv"
         data_raw = wr.s3.read_csv(data_original_path)
 
         data = data_raw.drop(['rerun_ID', 'spec_obj_ID', 'obj_ID', 'run_ID','fiber_ID','plate','field_ID','cam_col'], axis=1)
