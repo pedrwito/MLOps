@@ -1,68 +1,55 @@
+from sklearn.metrics import roc_curve, auc, confusion_matrix, ConfusionMatrixDisplay
+from sklearn.preprocessing import label_binarize
 import matplotlib.pyplot as plt
-from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay, roc_curve
+import numpy as np
 
-
-def plot_confusion_matrix(y_real, y_pred, save_path=None):
-
-    # Chequeamos que los dataframes estén alineados
+def plot_confusion_matrix(y_real, y_pred, class_names=None, save_path=None):
     if y_real.shape[0] != y_pred.shape[0]:
         raise ValueError("y_real and y_pred are not aligned")
 
     cm = confusion_matrix(y_real, y_pred)
-
-    disp = ConfusionMatrixDisplay(confusion_matrix=cm)
+    disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=class_names)
 
     fig, ax = plt.subplots(figsize=(6, 6))
     ax.grid(False)
-    disp.plot(ax=ax)
-    ax.set_title("Matriz de confusión de modelo")
+    disp.plot(ax=ax, cmap="Blues")
+    ax.set_title("Matriz de confusión del modelo")
 
     plt.tight_layout()
-
-    # Grabamos el gráfico si save_path es especificado
     if save_path:
         plt.savefig(save_path, format="png", dpi=600)
-
-    # Prevemos que Matplotlib de mostrar el gráfico cada vez que llamamos a la función
     plt.close(fig)
-
     return fig
 
 
-def plot_roc_curve(y_real, y_pred, num_class=3, save_path=None):
 
-    # Chequeamos que los dataframes estén alineados
-    if y_real.shape[0] != y_pred.shape[0]:
-        raise ValueError("y_real and y_pred are not aligned")
+def plot_roc_curve(y_real, y_score, class_names=None, save_path=None):
+    # y_real: valores verdaderos (clases)
+    # y_score: matriz de probabilidades, de shape (n_samples, n_classes)
+    n_classes = y_score.shape[1]
 
-    fig_plots = []
-    for i in range(num_class):
+    # Binarizamos los labels
+    y_real_bin = label_binarize(y_real, classes=np.arange(n_classes))
 
-        y_real_temp = (y_real == i).astype(int)
-        y_pred_temp = (y_pred == i).astype(int)
+    fig = plt.figure(figsize=(8, 6))
 
-        fpr, tpr, _ = roc_curve(y_real_temp, y_pred_temp)
+    for i in range(n_classes):
+        fpr, tpr, _ = roc_curve(y_real_bin[:, i], y_score[:, i])
+        roc_auc = auc(fpr, tpr)
+        label = f"Clase {i} (AUC = {roc_auc:.2f})" if not class_names else f"{class_names[i]} (AUC = {roc_auc:.2f})"
+        plt.plot(fpr, tpr, lw=2, label=label)
 
-        # Creamos la gráfica de barra
-        fig = plt.figure(figsize=(12, 8))
+    plt.plot([0, 1], [0, 1], linestyle='--', color='gray', lw=2)
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.0, 1.05])
+    plt.xlabel("Tasa de falsos positivos", fontsize=14)
+    plt.ylabel("Tasa de verdaderos positivos", fontsize=14)
+    plt.title("Curva ROC multiclase", fontsize=16)
+    plt.legend(loc="lower right")
+    plt.grid(True)
+    plt.tight_layout()
 
-        plt.plot(fpr, tpr)
-        plt.title(f"Curva ROC clase {i}", fontsize=18)
-        plt.xlim([-0.01, 1.01])
-        plt.ylim([-0.01, 1.01])
-        plt.xlabel("Tasa de falsos positivos", fontsize=16)
-        plt.ylabel("Tasa de verdaderos positivos", fontsize=16)
-        plt.xticks(fontsize=14)
-        plt.yticks(fontsize=14)
-        plt.grid()
-        plt.tight_layout()
-        fig_plots.append(fig)
-
-        plt.close(fig)
-
-    # Grabamos el gráfico si save_path es especificado
     if save_path:
         plt.savefig(save_path, format="png", dpi=600)
-
-    # Prevemos que Matplotlib de mostrar el gráfico cada vez que llamamos a la función
-    return fig_plots
+    plt.close(fig)
+    return fig
