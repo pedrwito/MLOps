@@ -25,7 +25,7 @@ def plot_histograms(data, col, save_path=None):
     if col == 'u':
         plt.xlim(0, 50)
     elif col == 'g':
-        plt.xlim(0, 50)XS
+        plt.xlim(0, 50)
     elif col == 'z':
         plt.xlim(0, 50)
     elif col == 'redshift':
