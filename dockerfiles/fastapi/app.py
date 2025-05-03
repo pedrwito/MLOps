@@ -6,7 +6,7 @@ import mlflow
 import numpy as np
 import pandas as pd
 
-from typing import Literal
+from typing import Literal, List
 from fastapi import FastAPI, Body, BackgroundTasks
 from fastapi.responses import JSONResponse
 from fastapi.encoders import jsonable_encoder
@@ -77,7 +77,7 @@ def check_model():
     global version_model
 
     try:
-        model_name = "heart_disease_model_prod"
+        model_name = "star_classification_model_prod"
         alias = "champion"
 
         mlflow.set_tracking_uri('http://mlflow:5000')
@@ -99,110 +99,68 @@ def check_model():
 
 class ModelInput(BaseModel):
     """
-    Input schema for the heart disease prediction model.
+    Input schema for the star classification model.
 
-    This class defines the input fields required by the heart disease prediction model along with their descriptions
+    This class defines the input fields required by the star classification model along with their descriptions
     and validation constraints.
 
-    :param age: Age of the patient (0 to 150).
-    :param sex: Sex of the patient. 1: male; 0: female.
-    :param cp: Chest pain type. 1: typical angina; 2: atypical angina; 3: non-anginal pain; 4: asymptomatic.
-    :param trestbps: Resting blood pressure in mm Hg on admission to the hospital (90 to 220).
-    :param chol: Serum cholestoral in mg/dl (110 to 600).
-    :param fbs: Fasting blood sugar. 1: >120 mg/dl; 0: <120 mg/dl.
-    :param restecg: Resting electrocardiographic results. 0: normal; 1: having ST-T wave abnormality; 2: showing
-                    probable or definite left ventricular hypertrophy.
-    :param thalach: Maximum heart rate achieved (beats per minute) (50 to 210).
-    :param exang: Exercise induced angina. 1: yes; 0: no.
-    :param oldpeak: ST depression induced by exercise relative to rest (0.0 to 7.0).
-    :param slope: The slope of the peak exercise ST segment. 1: upsloping; 2: flat; 3: downsloping.
-    :param ca: Number of major vessels colored by flourosopy (0 to 3).
-    :param thal: Thalassemia disease. 3: normal; 6: fixed defect; 7: reversable defect.
+    :param alpha: Right ascension angle (SDSS coordinate system) in degrees.
+    :param delta: Declination angle (SDSS coordinate system) in degrees.
+    :param u: Ultraviolet filter in the photometric system.
+    :param g: Green filter in the photometric system.
+    :param r: Red filter in the photometric system.
+    :param i: Near-infrared filter in the photometric system.
+    :param z: Infrared filter in the photometric system.
+    :param redshift: Redshift value based on the increase in wavelength.
+    :param MJD: Modified Julian Date used to indicate when the astronomical data was taken.
     """
 
-    age: int = Field(
-        description="Age of the patient",
+    alpha: float = Field(
+        description="Right ascension angle (SDSS coordinate system) in degrees",
         ge=0,
-        le=150,
+        le=360,
     )
-    sex: int = Field(
-        description="Sex of the patient. 1: male; 0: female",
+    delta: float = Field(
+        description="Declination angle (SDSS coordinate system) in degrees",
+        ge=-90,
+        le=90,
+    )
+    u: float = Field(
+        description="Ultraviolet filter in the photometric system",
+    )
+    g: float = Field(
+        description="Green filter in the photometric system",
+    )
+    r: float = Field(
+        description="Red filter in the photometric system",
+    )
+    i: float = Field(
+        description="Near-infrared filter in the photometric system",
+    )
+    z: float = Field(
+        description="Infrared filter in the photometric system",
+    )
+    redshift: float = Field(
+        description="Redshift value based on the increase in wavelength",
         ge=0,
-        le=1,
     )
-    cp: int = Field(
-        description="Chest pain type. 1: typical angina; 2: atypical angina, 3: non-anginal pain; 4: asymptomatic",
-        ge=1,
-        le=4,
-    )
-    trestbps: float = Field(
-        description="Resting blood pressure in mm Hg on admission to the hospital",
-        ge=90,
-        le=220,
-    )
-    chol: float = Field(
-        description="Serum cholestoral in mg/dl",
-        ge=110,
-        le=600,
-    )
-    fbs: int = Field(
-        description="Fasting blood sugar. 1: >120 mg/dl; 0: <120 mg/dl",
-        ge=0,
-        le=1,
-    )
-    restecg: int = Field(
-        description="Resting electrocardiographic results. 0: normal; 1:  having ST-T wave abnormality (T wave "
-                    "inversions and/or ST elevation or depression of > 0.05 mV), 2: showing probable or definite "
-                    "left ventricular hypertrophy by Estes' criteria",
-        ge=0,
-        le=2,
-    )
-    thalach: float = Field(
-        description="Maximum heart rate achieved (beats per minute)",
-        ge=50,
-        le=210,
-    )
-    exang: int = Field(
-        description="Exercise induced angina. 1: yes; 0: no",
-        ge=0,
-        le=1,
-    )
-    oldpeak: float = Field(
-        description="ST depression induced by exercise relative to rest",
-        ge=0.0,
-        le=7.0,
-    )
-    slope: int = Field(
-        description="The slope of the peak exercise ST segment .1: upsloping; 2: flat, 3: downsloping",
-        ge=1,
-        le=3,
-    )
-    ca: int = Field(
-        description="Number of major vessels colored by flourosopy",
-        ge=0,
-        le=3,
-    )
-    thal: Literal[3, 6, 7] = Field(
-        description="Thalassemia disease. 3: normal; 6: fixed defect; 7: reversable defect",
+    MJD: float = Field(
+        description="Modified Julian Date used to indicate when the astronomical data was taken",
     )
 
     model_config = {
         "json_schema_extra": {
             "examples": [
                 {
-                    "age": 67,
-                    "sex": 1,
-                    "cp": 4,
-                    "trestbps": 160.0,
-                    "chol": 286.0,
-                    "fbs": 0,
-                    "restecg": 2,
-                    "thalach": 108.0,
-                    "exang": 1,
-                    "oldpeak": 1.5,
-                    "slope": 2,
-                    "ca": 3,
-                    "thal": 3,
+                    "alpha": 118.663,
+                    "delta": 39.234,
+                    "u": 23.87,
+                    "g": 22.38,
+                    "r": 20.94,
+                    "i": 19.11,
+                    "z": 17.32,
+                    "redshift": 0.14,
+                    "MJD": 51663.12
                 }
             ]
         }
@@ -211,28 +169,33 @@ class ModelInput(BaseModel):
 
 class ModelOutput(BaseModel):
     """
-    Output schema for the heart disease prediction model.
+    Output schema for the star classification model.
 
-    This class defines the output fields returned by the heart disease prediction model along with their descriptions
+    This class defines the output fields returned by the star classification model along with their descriptions
     and possible values.
 
-    :param int_output: Output of the model. True if the patient has a heart disease.
-    :param str_output: Output of the model in string form. Can be "Healthy patient" or "Heart disease detected".
+    :param class_id: Numeric ID of the predicted class (0: star, 1: galaxy, 2: quasar).
+    :param class_name: Name of the predicted class ('STAR', 'GALAXY', 'QSO').
+    :param probabilities: Probability distribution across all possible classes.
     """
 
-    int_output: bool = Field(
-        description="Output of the model. True if the patient has a heart disease",
+    class_id: int = Field(
+        description="Numeric ID of the predicted class (0: STAR, 1: GALAXY, 2: QSO)",
     )
-    str_output: Literal["Healthy patient", "Heart disease detected"] = Field(
-        description="Output of the model in string form",
+    class_name: Literal["STAR", "GALAXY", "QSO"] = Field(
+        description="Name of the predicted class",
+    )
+    probabilities: List[float] = Field(
+        description="Probability distribution across all possible classes [STAR, GALAXY, QSO]",
     )
 
     model_config = {
         "json_schema_extra": {
             "examples": [
                 {
-                    "int_output": True,
-                    "str_output": "Heart disease detected",
+                    "class_id": 1,
+                    "class_name": "GALAXY",
+                    "probabilities": [0.05, 0.85, 0.10]
                 }
             ]
         }
@@ -240,19 +203,77 @@ class ModelOutput(BaseModel):
 
 
 # Load the model before start
-model, version_model, data_dict = load_model("heart_disease_model_prod", "champion")
+model, version_model, data_dict = load_model("star_classification_model_prod", "champion")
 
-app = FastAPI()
+app = FastAPI(
+    title="Star Classification API",
+    description="API for classifying astronomical objects as stars, galaxies, or quasars",
+    version="1.0.0",
+)
 
 
 @app.get("/")
 async def read_root():
     """
-    Root endpoint of the Heart Disease Detector API.
+    Root endpoint providing basic information about the API.
 
-    This endpoint returns a JSON response with a welcome message to indicate that the API is running.
+    :return: A welcome message with information about the API.
     """
-    return JSONResponse(content=jsonable_encoder({"message": "Welcome to the Heart Disease Detector API"}))
+    return {
+        "message": "Welcome to the Star Classification API!",
+        "description": "Use this API to classify astronomical objects as stars, galaxies, or quasars.",
+        "endpoints": {
+            "/predict": "Send stellar data to get a classification prediction",
+            "/health": "Check the health status of the API",
+            "/model-info": "Get information about the current model in use"
+        }
+    }
+
+
+@app.get("/health")
+async def health_check():
+    """
+    Health check endpoint to verify the API is functioning properly.
+
+    :return: A status message indicating the API is operational.
+    """
+    return {
+        "status": "healthy",
+        "model_version": version_model
+    }
+
+
+@app.get("/model-info")
+async def model_info():
+    """
+    Provides information about the currently loaded model.
+
+    :return: Details about the model version and relevant metadata.
+    """
+    try:
+        mlflow.set_tracking_uri('http://mlflow:5000')
+        client = mlflow.MlflowClient()
+        model_data = client.get_model_version_by_alias("star_classification_model_prod", "champion")
+        
+        return {
+            "model_name": "star_classification_model_prod",
+            "model_version": version_model,
+            "model_type": type(model).__name__,
+            "creation_timestamp": model_data.creation_timestamp,
+            "last_updated_timestamp": model_data.last_updated_timestamp,
+            "description": "Star classification model to categorize astronomical objects",
+            "input_features": ["alpha", "delta", "u", "g", "r", "i", "z", "redshift", "MJD"],
+            "output_classes": ["STAR", "GALAXY", "QSO"]
+        }
+    except:
+        return {
+            "model_name": "star_classification_model_prod",
+            "model_version": version_model,
+            "model_type": type(model).__name__,
+            "description": "Star classification model to categorize astronomical objects",
+            "input_features": ["alpha", "delta", "u", "g", "r", "i", "z", "redshift", "MJD"],
+            "output_classes": ["STAR", "GALAXY", "QSO"]
+        }
 
 
 @app.post("/predict/", response_model=ModelOutput)
@@ -264,46 +285,150 @@ def predict(
     background_tasks: BackgroundTasks
 ):
     """
-    Endpoint for predicting heart disease.
+    Predict the class of an astronomical object based on input features.
 
-    This endpoint receives features related to a patient's health and predicts whether the patient has heart disease
-    or not using a trained model. It returns the prediction result in both integer and string formats.
+    This endpoint recieves features from stellar data and returns a classification prediction (STAR, GALAXY, or QSO).
+
+    :param features: Input features for the prediction.
+    :param background_tasks: Background tasks to run after the request.
+    :return: Prediction result indicating the class of the astronomical object.
     """
-
-    # Extract features from the request and convert them into a list and dictionary
-    features_list = [*features.dict().values()]
-    features_key = [*features.dict().keys()]
-
-    # Convert features into a pandas DataFrame
-    features_df = pd.DataFrame(np.array(features_list).reshape([1, -1]), columns=features_key)
-
-    # Process categorical features
-    for categorical_col in data_dict["categorical_columns"]:
-        features_df[categorical_col] = features_df[categorical_col].astype(int)
-        categories = data_dict["categories_values_per_categorical"][categorical_col]
-        features_df[categorical_col] = pd.Categorical(features_df[categorical_col], categories=categories)
-
-    # Convert categorical features into dummy variables
-    features_df = pd.get_dummies(data=features_df,
-                                 columns=data_dict["categorical_columns"],
-                                 drop_first=True)
-
-    # Reorder DataFrame columns
-    features_df = features_df[data_dict["columns_after_dummy"]]
-
-    # Scale the data using standard scaler
-    features_df = (features_df-data_dict["standard_scaler_mean"])/data_dict["standard_scaler_std"]
-
-    # Make the prediction using the trained model
-    prediction = model.predict(features_df)
-
-    # Convert prediction result into string format
-    str_pred = "Healthy patient"
-    if prediction[0] > 0:
-        str_pred = "Heart disease detected"
-
-    # Check if the model has changed asynchronously
+    # Schedule a background task to check for model updates
     background_tasks.add_task(check_model)
 
-    # Return the prediction result
-    return ModelOutput(int_output=bool(prediction[0].item()), str_output=str_pred)
+    try:
+        # Convert the input to a pandas DataFrame
+        input_df = pd.DataFrame([{
+            'alpha': features.alpha,
+            'delta': features.delta,
+            'u': features.u,
+            'g': features.g,
+            'r': features.r,
+            'i': features.i,
+            'z': features.z,
+            'redshift': features.redshift
+        }])
+        
+        # Calculate Month from MJD if needed (similar to how it's done in the TL DAG)
+        from astropy.time import Time
+        mjd_date = Time(features.MJD, format='mjd').to_datetime()
+        input_df['Month'] = mjd_date.month
+        
+        # Apply normalization using the scaler parameters from the data dictionary
+        numerical_features = ["alpha", "delta", "u", "g", "r", "i", "z", "redshift", "Month"]
+        for i, feature in enumerate(numerical_features):
+            if feature in input_df.columns:
+                input_df[feature] = (input_df[feature] - data_dict["standard_scaler_mean"][i]) / data_dict["standard_scaler_std"][i]
+        
+        # Make the prediction
+        class_id = model.predict(input_df)[0]
+        
+        # Get probabilities if the model supports it
+        try:
+            probabilities = model.predict_proba(input_df)[0].tolist()
+        except:
+            # If predict_proba is not available, create a simple probability distribution
+            probabilities = [0.0, 0.0, 0.0]
+            probabilities[class_id] = 1.0
+        
+        # Map class ID to class name
+        class_map = {0: "STAR", 1: "GALAXY", 2: "QSO"}
+        class_name = class_map.get(class_id)
+        
+        # Create the response
+        result = ModelOutput(
+            class_id=int(class_id),
+            class_name=class_name,
+            probabilities=probabilities
+        )
+        
+        return jsonable_encoder(result)
+    
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"Prediction error: {str(e)}"}
+        )
+
+
+@app.post("/batch-predict/")
+def batch_predict(
+    features_list: List[ModelInput],
+    background_tasks: BackgroundTasks
+):
+    """
+    Predict the class of multiple astronomical objects in a batch.
+
+    This endpoint accepts a list of stellar data entries and returns classification predictions for each.
+    
+    :param features_list: List of input features for batch prediction.
+    :param background_tasks: Background tasks to run after the request.
+    :return: List of prediction results.
+    """
+    # Schedule a background task to check for model updates
+    background_tasks.add_task(check_model)
+    
+    results = []
+    
+    try:
+        # Convert the inputs to a pandas DataFrame
+        input_data = []
+        for features in features_list:
+            input_data.append({
+                'alpha': features.alpha,
+                'delta': features.delta,
+                'u': features.u,
+                'g': features.g,
+                'r': features.r,
+                'i': features.i,
+                'z': features.z,
+                'redshift': features.redshift,
+                'MJD': features.MJD
+            })
+        
+        input_df = pd.DataFrame(input_data)
+        
+        # Calculate Month from MJD
+        from astropy.time import Time
+        input_df['Gregorian_Date'] = Time(input_df['MJD'], format='mjd').to_datetime()
+        input_df['Month'] = input_df['Gregorian_Date'].dt.month
+        input_df = input_df.drop(['Gregorian_Date', 'MJD'], axis=1)
+        
+        # Apply normalization
+        numerical_features = ["alpha", "delta", "u", "g", "r", "i", "z", "redshift", "Month"]
+        for i, feature in enumerate(numerical_features):
+            if feature in input_df.columns:
+                input_df[feature] = (input_df[feature] - data_dict["standard_scaler_mean"][i]) / data_dict["standard_scaler_std"][i]
+        
+        # Make predictions
+        class_ids = model.predict(input_df).tolist()
+        
+        # Get probabilities if available
+        try:
+            all_probabilities = model.predict_proba(input_df).tolist()
+        except:
+            # If predict_proba is not available, create simple probability distributions
+            all_probabilities = []
+            for class_id in class_ids:
+                probs = [0.0, 0.0, 0.0]
+                probs[class_id] = 1.0
+                all_probabilities.append(probs)
+        
+        # Map class IDs to class names
+        class_map = {0: "STAR", 1: "GALAXY", 2: "QSO"}
+        
+        # Create results
+        for i, class_id in enumerate(class_ids):
+            results.append({
+                "class_id": class_id,
+                "class_name": class_map.get(class_id),
+                "probabilities": all_probabilities[i]
+            })
+        
+        return jsonable_encoder(results)
+    
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"Batch prediction error: {str(e)}"}
+        )
