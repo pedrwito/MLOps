@@ -52,7 +52,7 @@ def processing_dag():
 
         try:
             s3_bucket = Variable.get("s3_bucket", "data")
-            mlflow_uri = Variable.get("mlflow_tracking_uri", "http://mlflow:5001")
+            mlflow_uri = Variable.get("mlflow_tracking_uri", "http://mlflow:5000")
             mlflow.set_tracking_uri(mlflow_uri)
 
             def load_the_champion_model():
@@ -70,10 +70,10 @@ def processing_dag():
 
             def load_the_train_test_data():
                 logging.info("Loading training and test data from S3")
-                X_train = wr.s3.read_csv(f"s3://{s3_bucket}/final/train/X_train.csv")
-                y_train = wr.s3.read_csv(f"s3://{s3_bucket}/final/train/y_train.csv")
-                X_test = wr.s3.read_csv(f"s3://{s3_bucket}/final/test/h_X_test.csv")
-                y_test = wr.s3.read_csv(f"s3://{s3_bucket}/final/test/y_test.csv")
+                X_train = wr.s3.read_csv(f"s3://{s3_bucket}/processed/X_train.csv")
+                y_train = wr.s3.read_csv(f"s3://{s3_bucket}/processed/y_train.csv")
+                X_test = wr.s3.read_csv(f"s3://{s3_bucket}/processed/X_test.csv")
+                y_test = wr.s3.read_csv(f"s3://{s3_bucket}/processed/y_test.csv")
                 logging.info(f"Successfully loaded data. X_train shape: {X_train.shape}")
 
                 return X_train, y_train, X_test, y_test
@@ -196,8 +196,8 @@ def processing_dag():
 
             def load_the_test_data():
                 logging.info("Loading test data")
-                X_test = wr.s3.read_csv(f"s3://{s3_bucket}/final/test/heart_X_test.csv")
-                y_test = wr.s3.read_csv(f"s3://{s3_bucket}/final/test/heart_y_test.csv")
+                X_test = wr.s3.read_csv(f"s3://{s3_bucket}/processed/X_test.csv")
+                y_test = wr.s3.read_csv(f"s3://{s3_bucket}/processed/y_test.csv")
                 logging.info(f"Successfully loaded test data. X_test shape: {X_test.shape}")
 
                 return X_test, y_test
