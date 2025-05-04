@@ -109,33 +109,49 @@ def process_tl_star_data():
         system_site_packages=True
     )
     def split_data(data):
-        """Split data into training and testing sets."""
+        """Split data into training, testing, and evaluation sets."""
         import pandas as pd
         import logging
         from sklearn.model_selection import train_test_split
         from airflow.exceptions import AirflowException
         
         try:
-            train_df, test_df = train_test_split(data, test_size=0.3, random_state=42)
+            # First split: separate out 90% for train+test and 10% for evaluation
+            train_test_df, eval_df = train_test_split(data, test_size=0.10, random_state=42)
+            
+            # Second split: from the 90%, allocate 70/20 (which is approx 78/22 of the 90%)
+            train_df, test_df = train_test_split(train_test_df, test_size=0.22, random_state=42)
+            
+            # Log the shapes of the three datasets
             logging.info(f"Training set shape: {train_df.shape}")
             logging.info(f"Testing set shape: {test_df.shape}")
+            logging.info(f"Evaluation set shape: {eval_df.shape}")
             
+            # Extract features and labels
             X_train = train_df.drop(['class'], axis=1)
-            y_train = train_df['class'].tolist()  # Convert Series to list
+            y_train = train_df['class'].tolist()
+            
             X_test = test_df.drop(['class'], axis=1)
-            y_test = test_df['class'].tolist()  # Convert Series to list
+            y_test = test_df['class'].tolist()
+            
+            X_eval = eval_df.drop(['class'], axis=1)
+            y_eval = eval_df['class'].tolist()
             
             # Convert DataFrames to dictionaries with lists
             X_train_dict = {col: X_train[col].tolist() for col in X_train.columns}
             X_test_dict = {col: X_test[col].tolist() for col in X_test.columns}
+            X_eval_dict = {col: X_eval[col].tolist() for col in X_eval.columns}
             
             return {
                 'X_train': X_train_dict,
                 'y_train': y_train,
                 'X_test': X_test_dict,
                 'y_test': y_test,
+                'X_eval': X_eval_dict,
+                'y_eval': y_eval,
                 'train_shape': train_df.shape,
-                'test_shape': test_df.shape
+                'test_shape': test_df.shape,
+                'eval_shape': eval_df.shape
             }
         except Exception as e:
             logging.error(f"Error splitting data: {str(e)}")
@@ -162,18 +178,22 @@ def process_tl_star_data():
             # Convert back to DataFrames
             X_train = pd.DataFrame(split_data_dict['X_train'])
             X_test = pd.DataFrame(split_data_dict['X_test'])
+            X_eval = pd.DataFrame(split_data_dict['X_eval'])
             
             scaler = StandardScaler()
             X_train_norm = scaler.fit_transform(X_train[numerical_cols])
             X_test_norm = scaler.transform(X_test[numerical_cols])
+            X_eval_norm = scaler.transform(X_eval[numerical_cols])
             
             # Convert back to DataFrame to preserve column names
             X_train_norm = pd.DataFrame(X_train_norm, columns=numerical_cols)
             X_test_norm = pd.DataFrame(X_test_norm, columns=numerical_cols)
+            X_eval_norm = pd.DataFrame(X_eval_norm, columns=numerical_cols)
             
             # Convert to serializable format
             X_train_norm_dict = {col: X_train_norm[col].tolist() for col in X_train_norm.columns}
             X_test_norm_dict = {col: X_test_norm[col].tolist() for col in X_test_norm.columns}
+            X_eval_norm_dict = {col: X_eval_norm[col].tolist() for col in X_eval_norm.columns}
             
             # Serialize the scaler using pickle and base64
             scaler_bytes = pickle.dumps(scaler)
@@ -182,8 +202,10 @@ def process_tl_star_data():
             return {
                 'X_train_norm': X_train_norm_dict,
                 'X_test_norm': X_test_norm_dict,
+                'X_eval_norm': X_eval_norm_dict,
                 'y_train': split_data_dict['y_train'],
                 'y_test': split_data_dict['y_test'],
+                'y_eval': split_data_dict['y_eval'],
                 'scaler_b64': scaler_b64
             }
         except Exception as e:
@@ -210,6 +232,7 @@ def process_tl_star_data():
         try:
             s3_bucket = Variable.get("s3_bucket", "data")
             base_path = f"s3://{s3_bucket}/processed"
+            final_path = f"s3://{s3_bucket}/final"
             
             # Configure S3 endpoint for Minio
             boto3_session = boto3.Session()
@@ -223,10 +246,13 @@ def process_tl_star_data():
             # Convert dictionary data back to DataFrames for saving
             X_train_norm = pd.DataFrame(normalized_data['X_train_norm'])
             X_test_norm = pd.DataFrame(normalized_data['X_test_norm'])
+            X_eval_norm = pd.DataFrame(normalized_data['X_eval_norm'])
+            
             y_train = pd.DataFrame(normalized_data['y_train'], columns=['class'])
             y_test = pd.DataFrame(normalized_data['y_test'], columns=['class'])
+            y_eval = pd.DataFrame(normalized_data['y_eval'], columns=['class'])
             
-            # Save normalized datasets
+            # Save normalized datasets to processed folder
             wr.s3.to_csv(
                 df=X_train_norm,
                 path=f"{base_path}/X_train.csv",
@@ -240,6 +266,12 @@ def process_tl_star_data():
                 boto3_session=boto3_session
             )
             wr.s3.to_csv(
+                df=X_eval_norm,
+                path=f"{base_path}/X_eval.csv",
+                index=False,
+                boto3_session=boto3_session
+            )
+            wr.s3.to_csv(
                 df=y_train,
                 path=f"{base_path}/y_train.csv",
                 index=False,
@@ -248,6 +280,38 @@ def process_tl_star_data():
             wr.s3.to_csv(
                 df=y_test,
                 path=f"{base_path}/y_test.csv",
+                index=False,
+                boto3_session=boto3_session
+            )
+            wr.s3.to_csv(
+                df=y_eval,
+                path=f"{base_path}/y_eval.csv",
+                index=False,
+                boto3_session=boto3_session
+            )
+            
+            # Also save the test and evaluation data to final folder for easier access
+            wr.s3.to_csv(
+                df=X_test_norm,
+                path=f"{final_path}/test/h_X_test.csv",
+                index=False,
+                boto3_session=boto3_session
+            )
+            wr.s3.to_csv(
+                df=y_test,
+                path=f"{final_path}/test/y_test.csv",
+                index=False,
+                boto3_session=boto3_session
+            )
+            wr.s3.to_csv(
+                df=X_eval_norm,
+                path=f"{final_path}/eval/X_eval.csv",
+                index=False,
+                boto3_session=boto3_session
+            )
+            wr.s3.to_csv(
+                df=y_eval,
+                path=f"{final_path}/eval/y_eval.csv",
                 index=False,
                 boto3_session=boto3_session
             )

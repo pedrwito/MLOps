@@ -35,56 +35,45 @@ default_args = {
 def weekly_evaluation_dag():
 
     @task.virtualenv(
-        task_id="collect_recent_data",
+        task_id="load_evaluation_data",
         requirements=["awswrangler==3.6.0", "pandas==2.1.0"],
         system_site_packages=True
     )
-    def collect_recent_data():
+    def load_evaluation_data():
         import awswrangler as wr
         import pandas as pd
-        from datetime import datetime, timedelta
+        from datetime import datetime
         
         try:
-            logging.info("Collecting recent data for evaluation")
+            logging.info("Loading evaluation data for model assessment")
             s3_bucket = Variable.get("s3_bucket", "data")
             
-            # Get last week's data
-            today = datetime.now()
-            last_week = today - timedelta(days=7)
-            last_week_str = last_week.strftime("%Y-%m-%d")
+            # Load the evaluation dataset that was created during the LT process
+            eval_data_path = f"s3://{s3_bucket}/final/eval/X_eval.csv"
+            eval_labels_path = f"s3://{s3_bucket}/final/eval/y_eval.csv"
             
-            # In a real scenario, we would filter data by date
-            # For this example, we'll use the test data to simulate recent data
-            recent_data_path = f"s3://{s3_bucket}/final/test/h_X_test.csv"
-            recent_labels_path = f"s3://{s3_bucket}/final/test/y_test.csv"
+            eval_data = wr.s3.read_csv(eval_data_path)
+            eval_labels = wr.s3.read_csv(eval_labels_path)
             
-            recent_data = wr.s3.read_csv(recent_data_path)
-            recent_labels = wr.s3.read_csv(recent_labels_path)
-            
-            # Save recent data to a temporary location for the evaluation
-            temp_path = f"s3://{s3_bucket}/temp/weekly_evaluation/{today.strftime('%Y-%m-%d')}"
-            wr.s3.to_csv(recent_data, f"{temp_path}/recent_data.csv", index=False)
-            wr.s3.to_csv(recent_labels, f"{temp_path}/recent_labels.csv", index=False)
-            
-            logging.info(f"Successfully collected recent data with shape: {recent_data.shape}")
+            logging.info(f"Successfully loaded evaluation data with shape: {eval_data.shape}")
             
             return {
                 "status": "success",
-                "data_path": f"{temp_path}/recent_data.csv",
-                "labels_path": f"{temp_path}/recent_labels.csv",
-                "rows": len(recent_data)
+                "data_path": eval_data_path,
+                "labels_path": eval_labels_path,
+                "rows": len(eval_data)
             }
             
         except Exception as e:
-            logging.error(f"Error collecting recent data: {str(e)}")
-            raise AirflowException(f"Failed to collect recent data: {str(e)}")
+            logging.error(f"Error loading evaluation data: {str(e)}")
+            raise AirflowException(f"Failed to load evaluation data: {str(e)}")
 
     @task.virtualenv(
         task_id="detect_data_drift",
         requirements=["scikit-learn==1.3.2", "awswrangler==3.6.0", "scipy==1.12.0"],
         system_site_packages=True
     )
-    def detect_data_drift(collect_data_result):
+    def detect_data_drift(eval_data_result):
         import awswrangler as wr
         import pandas as pd
         import numpy as np
@@ -94,12 +83,12 @@ def weekly_evaluation_dag():
             logging.info("Detecting data drift")
             s3_bucket = Variable.get("s3_bucket", "data")
             
-            # Get paths from previous task
-            recent_data_path = collect_data_result["data_path"]
+            # Get path from previous task
+            eval_data_path = eval_data_result["data_path"]
             
-            # Load recent data and training data for comparison
-            recent_data = wr.s3.read_csv(recent_data_path)
-            training_data = wr.s3.read_csv(f"s3://{s3_bucket}/final/train/X_train.csv")
+            # Load evaluation data and training data for comparison
+            eval_data = wr.s3.read_csv(eval_data_path)
+            training_data = wr.s3.read_csv(f"s3://{s3_bucket}/processed/X_train.csv")
             
             # Calculate drift metrics using KS test for each numerical feature
             numerical_features = ["alpha", "delta", "u", "g", "r", "i", "z", "redshift"]
@@ -107,10 +96,10 @@ def weekly_evaluation_dag():
             drift_detected = False
             
             for feature in numerical_features:
-                if feature in recent_data.columns and feature in training_data.columns:
+                if feature in eval_data.columns and feature in training_data.columns:
                     # Perform Kolmogorov-Smirnov test
                     ks_stat, p_value = stats.ks_2samp(
-                        recent_data[feature].dropna(), 
+                        eval_data[feature].dropna(), 
                         training_data[feature].dropna()
                     )
                     
@@ -132,7 +121,7 @@ def weekly_evaluation_dag():
                 for k, v in drift_results.items()
             ])
             
-            report_date = collect_data_path = collect_data_result["data_path"].split("/")[-2]
+            report_date = datetime.datetime.now().strftime("%Y-%m-%d")
             drift_report_path = f"s3://{s3_bucket}/reports/drift/{report_date}/drift_results.csv"
             wr.s3.to_csv(drift_results_df, drift_report_path, index=False)
             
@@ -154,10 +143,11 @@ def weekly_evaluation_dag():
         requirements=["scikit-learn==1.3.2", "mlflow==2.10.2", "awswrangler==3.6.0"],
         system_site_packages=True
     )
-    def evaluate_model_performance(collect_data_result):
+    def evaluate_model_performance(eval_data_result):
         import mlflow
         import awswrangler as wr
         import pandas as pd
+        import datetime
         from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
         
         try:
@@ -167,12 +157,12 @@ def weekly_evaluation_dag():
             mlflow.set_tracking_uri(mlflow_uri)
             
             # Get paths from previous task
-            recent_data_path = collect_data_result["data_path"]
-            recent_labels_path = collect_data_result["labels_path"]
+            eval_data_path = eval_data_result["data_path"]
+            eval_labels_path = eval_data_result["labels_path"]
             
             # Load data
-            X_recent = wr.s3.read_csv(recent_data_path)
-            y_recent = wr.s3.read_csv(recent_labels_path)
+            X_eval = wr.s3.read_csv(eval_data_path)
+            y_eval = wr.s3.read_csv(eval_labels_path)
             
             # Load production model
             model_name = "star_classification_model_prod"
@@ -181,23 +171,32 @@ def weekly_evaluation_dag():
             model = mlflow.sklearn.load_model(model_data.source)
             
             # Make predictions
-            y_pred = model.predict(X_recent)
+            y_pred = model.predict(X_eval)
             
             # Calculate metrics
             metrics = {
-                "accuracy": float(accuracy_score(y_recent, y_pred)),
-                "precision_macro": float(precision_score(y_recent, y_pred, average='macro')),
-                "recall_macro": float(recall_score(y_recent, y_pred, average='macro')),
-                "f1_macro": float(f1_score(y_recent, y_pred, average='macro'))
+                "accuracy": float(accuracy_score(y_eval, y_pred)),
+                "precision_macro": float(precision_score(y_eval, y_pred, average='macro')),
+                "recall_macro": float(recall_score(y_eval, y_pred, average='macro')),
+                "f1_macro": float(f1_score(y_eval, y_pred, average='macro'))
             }
+            
+            # Current date for tracking performance over time
+            current_date = datetime.datetime.now().strftime("%Y-%m-%d")
             
             # Log to MLflow
             experiment = mlflow.set_experiment("Star Classification Monitoring")
-            with mlflow.start_run(run_name=f"weekly_evaluation_{datetime.datetime.now().strftime('%Y%m%d')}",
+            with mlflow.start_run(run_name=f"weekly_evaluation_{current_date}",
                                  experiment_id=experiment.experiment_id):
-                # Log performance metrics
+                # Log performance metrics with date to track over time
                 for metric_name, metric_value in metrics.items():
                     mlflow.log_metric(metric_name, metric_value)
+                
+                # Log the evaluation date
+                mlflow.log_param("evaluation_date", current_date)
+                
+                # Log model version information
+                mlflow.log_param("model_version", model_data.version)
                 
                 # Get performance threshold from variable or use default
                 performance_threshold = float(Variable.get("model_performance_threshold", "0.8"))
@@ -210,16 +209,15 @@ def weekly_evaluation_dag():
                     logging.warning(f"Model performance below threshold: {metrics['accuracy']} < {performance_threshold}")
                 
                 # Create confusion matrix and log as a figure
-                cm = confusion_matrix(y_recent, y_pred)
+                cm = confusion_matrix(y_eval, y_pred)
                 cm_df = pd.DataFrame(cm)
                 cm_path = f"/tmp/confusion_matrix.csv"
                 cm_df.to_csv(cm_path, index=False)
                 mlflow.log_artifact(cm_path)
             
             # Save metrics to S3
-            report_date = collect_data_path = collect_data_result["data_path"].split("/")[-2]
             metrics_df = pd.DataFrame([metrics])
-            metrics_path = f"s3://{s3_bucket}/reports/performance/{report_date}/metrics.csv"
+            metrics_path = f"s3://{s3_bucket}/reports/performance/{current_date}/metrics.csv"
             wr.s3.to_csv(metrics_df, metrics_path, index=False)
             
             logging.info(f"Model evaluation completed. Accuracy: {metrics['accuracy']}")
@@ -228,7 +226,8 @@ def weekly_evaluation_dag():
                 "status": "success",
                 "metrics": metrics,
                 "metrics_path": metrics_path,
-                "performance_warning": performance_warning
+                "performance_warning": performance_warning,
+                "evaluation_date": current_date
             }
             
         except Exception as e:
@@ -244,7 +243,6 @@ def weekly_evaluation_dag():
         import awswrangler as wr
         import pandas as pd
         import json
-        from datetime import datetime
         
         try:
             logging.info("Generating evaluation report")
@@ -258,7 +256,7 @@ def weekly_evaluation_dag():
             
             # Create report
             report = {
-                "evaluation_date": datetime.now().strftime("%Y-%m-%d"),
+                "evaluation_date": performance_result["evaluation_date"],
                 "model_name": "star_classification_model_prod",
                 "drift_detected": drift_result["drift_detected"],
                 "features_with_drift": drift_result["features_with_drift"],
@@ -268,7 +266,7 @@ def weekly_evaluation_dag():
             }
             
             # Save report to S3
-            report_date = datetime.now().strftime("%Y-%m-%d")
+            report_date = performance_result["evaluation_date"]
             report_path = f"s3://{s3_bucket}/reports/weekly/{report_date}/evaluation_summary.json"
             
             # Convert to DataFrame for S3 storage
@@ -298,9 +296,9 @@ def weekly_evaluation_dag():
             raise AirflowException(f"Failed to generate evaluation report: {str(e)}")
     
     # Define task dependencies
-    collect_data = collect_recent_data()
-    drift_result = detect_data_drift(collect_data)
-    performance_result = evaluate_model_performance(collect_data)
+    eval_data = load_evaluation_data()
+    drift_result = detect_data_drift(eval_data)
+    performance_result = evaluate_model_performance(eval_data)
     generate_evaluation_report(drift_result, performance_result)
 
 dag = weekly_evaluation_dag()
