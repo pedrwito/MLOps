@@ -58,7 +58,7 @@ def process_el_star_data():
         try:
             # Get configuration from Airflow variables
             s3_bucket = Variable.get("s3_bucket", "data")
-            raw_data_path = f"s3://{s3_bucket}/raw/star_classification.csv"
+            raw_data_path = f"s3://{s3_bucket}/star_classification.csv"
             
             # Configure S3 endpoint for Minio
             boto3_session = boto3.Session()
@@ -111,7 +111,7 @@ def process_el_star_data():
         try:
             # Get configuration from Airflow variables
             s3_bucket = Variable.get("s3_bucket", "data")
-            data_original_path = f"s3://{s3_bucket}/raw/star_classification.csv"
+            data_original_path = f"s3://{s3_bucket}/star_classification.csv"
             data_end_path = f"s3://{s3_bucket}/raw/star_classification_filtered.csv"
             
             # Configure S3 endpoint for Minio
