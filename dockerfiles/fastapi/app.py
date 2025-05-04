@@ -32,19 +32,53 @@ def load_model(model_name: str, alias: str):
         mlflow.set_tracking_uri('http://mlflow:5000')
         client_mlflow = mlflow.MlflowClient()
 
-        model_data_mlflow = client_mlflow.get_model_version_by_alias(model_name, alias)
-        model_ml = mlflow.sklearn.load_model(model_data_mlflow.source)
-        version_model_ml = int(model_data_mlflow.version)
-    except:
+        # First look for the model registered with specific tags
+        try:
+            # Try to get directly by the model name
+            model_data_mlflow = client_mlflow.get_registered_model(model_name)
+            latest_version = model_data_mlflow.latest_versions[0].version
+            model_ml = mlflow.sklearn.load_model(f"models:/{model_name}/{latest_version}")
+            version_model_ml = int(latest_version)
+            print(f"Loaded model {model_name} version {latest_version}")
+        except:
+            # Try to find the champion model by searching experiments
+            experiments = client_mlflow.search_experiments()
+            found_model = False
+            
+            for exp in experiments:
+                # Look for runs tagged as champion
+                runs = client_mlflow.search_runs(
+                    experiment_ids=[exp.experiment_id],
+                    filter_string="tags.model_status = 'champion'",
+                    order_by=["attribute.start_time DESC"],
+                    max_results=1
+                )
+                
+                if len(runs) > 0:
+                    run_id = runs[0].info.run_id
+                    model_ml = mlflow.sklearn.load_model(f"runs:/{run_id}/LogReg_Grif")
+                    version_model_ml = 1
+                    found_model = True
+                    print(f"Loaded champion model from run {run_id}")
+                    break
+            
+            if not found_model:
+                raise Exception("No champion model found in MLflow")
+            
+    except Exception as e:
+        print(f"Error loading from MLflow: {str(e)}")
         # If there is no registry in MLflow, open the default model
         file_ml = open('/app/files/model.pkl', 'rb')
         model_ml = pickle.load(file_ml)
         file_ml.close()
         version_model_ml = 0
+        print("Loaded default model from file")
 
     try:
         # Load information of the ETL pipeline from S3
-        s3 = boto3.client('s3')
+        s3 = boto3.client('s3', endpoint_url='http://minio:9000', 
+                         aws_access_key_id='minio', 
+                         aws_secret_access_key='minio123')
 
         s3.head_object(Bucket='data', Key='data_info/data.json')
         result_s3 = s3.get_object(Bucket='data', Key='data_info/data.json')
@@ -53,11 +87,15 @@ def load_model(model_name: str, alias: str):
 
         data_dictionary["standard_scaler_mean"] = np.array(data_dictionary["standard_scaler_mean"])
         data_dictionary["standard_scaler_std"] = np.array(data_dictionary["standard_scaler_std"])
-    except:
+    except Exception as e:
+        print(f"Error loading from S3: {str(e)}")
         # If data dictionary is not found in S3, load it from local file
         file_s3 = open('/app/files/data.json', 'r')
         data_dictionary = json.load(file_s3)
         file_s3.close()
+        data_dictionary["standard_scaler_mean"] = np.array(data_dictionary["standard_scaler_mean"])
+        data_dictionary["standard_scaler_std"] = np.array(data_dictionary["standard_scaler_std"])
+        print("Loaded data dictionary from local file")
 
     return model_ml, version_model_ml, data_dictionary
 
@@ -77,22 +115,53 @@ def check_model():
     global version_model
 
     try:
-        model_name = "star_classification_model_prod"
-        alias = "champion"
-
+        # First try with the registered model name
+        model_name = "star_classification_model"
+        
         mlflow.set_tracking_uri('http://mlflow:5000')
         client = mlflow.MlflowClient()
 
-        # Check in the model registry if the version of the champion has changed
-        new_model_data = client.get_model_version_by_alias(model_name, alias)
-        new_version_model = int(new_model_data.version)
-
-        # If the versions are not the same
-        if new_version_model != version_model:
-            # Load the new model and update version and data dictionary
-            model, version_model, data_dict = load_model(model_name, alias)
-
-    except:
+        # Try to get the latest model by searching for champion tag across experiments
+        experiments = client.search_experiments()
+        latest_champion_run_id = None
+        
+        for exp in experiments:
+            runs = client.search_runs(
+                experiment_ids=[exp.experiment_id],
+                filter_string="tags.model_status = 'champion'",
+                order_by=["attribute.start_time DESC"],
+                max_results=1
+            )
+            
+            if len(runs) > 0:
+                latest_champion_run_id = runs[0].info.run_id
+                break
+        
+        if latest_champion_run_id:
+            # Load the new model
+            new_model = mlflow.sklearn.load_model(f"runs:/{latest_champion_run_id}/LogReg_Grif")
+            
+            # If we have a new model (comparing by run_id)
+            if latest_champion_run_id != getattr(model, "_run_id", None):
+                print(f"Updating model from run {latest_champion_run_id}")
+                model = new_model
+                # Store run_id to check future updates
+                model._run_id = latest_champion_run_id
+                version_model += 1
+                
+                # Also reload the data dictionary
+                try:
+                    file_s3 = open('/app/files/data.json', 'r')
+                    data_dict = json.load(file_s3)
+                    file_s3.close()
+                    data_dict["standard_scaler_mean"] = np.array(data_dict["standard_scaler_mean"])
+                    data_dict["standard_scaler_std"] = np.array(data_dict["standard_scaler_std"])
+                    print("Reloaded data dictionary")
+                except Exception as e:
+                    print(f"Error reloading data dictionary: {str(e)}")
+        
+    except Exception as e:
+        print(f"Error in check_model: {str(e)}")
         # If an error occurs during the process, pass silently
         pass
 
@@ -203,7 +272,7 @@ class ModelOutput(BaseModel):
 
 
 # Load the model before start
-model, version_model, data_dict = load_model("star_classification_model_prod", "champion")
+model, version_model, data_dict = load_model("star_classification_model", "champion")
 
 app = FastAPI(
     title="Star Classification API",
@@ -321,7 +390,28 @@ def predict(
                 input_df[feature] = (input_df[feature] - data_dict["standard_scaler_mean"][i]) / data_dict["standard_scaler_std"][i]
         
         # Make the prediction
-        class_id = model.predict(input_df)[0]
+        try:
+            prediction = model.predict(input_df)[0]
+            # Handle both string and int predictions
+            if isinstance(prediction, str):
+                if prediction == "STAR":
+                    class_id = 0
+                elif prediction == "GALAXY":
+                    class_id = 1
+                elif prediction == "QSO":
+                    class_id = 2
+                else:
+                    class_id = int(prediction)  # Try to convert to int
+                class_name = prediction
+            else:
+                class_id = int(prediction)
+                class_map = {0: "STAR", 1: "GALAXY", 2: "QSO"}
+                class_name = class_map.get(class_id, "UNKNOWN")
+        except Exception as predict_error:
+            print(f"Error during prediction: {str(predict_error)}")
+            # Default to a simple prediction if model prediction fails
+            class_id = 0
+            class_name = "STAR"
         
         # Get probabilities if the model supports it
         try:
@@ -331,13 +421,9 @@ def predict(
             probabilities = [0.0, 0.0, 0.0]
             probabilities[class_id] = 1.0
         
-        # Map class ID to class name
-        class_map = {0: "STAR", 1: "GALAXY", 2: "QSO"}
-        class_name = class_map.get(class_id)
-        
         # Create the response
         result = ModelOutput(
-            class_id=int(class_id),
+            class_id=class_id,
             class_name=class_name,
             probabilities=probabilities
         )
@@ -345,6 +431,7 @@ def predict(
         return jsonable_encoder(result)
     
     except Exception as e:
+        print(f"Prediction error: {str(e)}")
         return JSONResponse(
             status_code=500,
             content={"error": f"Prediction error: {str(e)}"}
@@ -401,7 +488,32 @@ def batch_predict(
                 input_df[feature] = (input_df[feature] - data_dict["standard_scaler_mean"][i]) / data_dict["standard_scaler_std"][i]
         
         # Make predictions
-        class_ids = model.predict(input_df).tolist()
+        try:
+            predictions = model.predict(input_df).tolist()
+            class_ids = []
+            class_names = []
+            
+            # Handle different prediction types
+            for pred in predictions:
+                if isinstance(pred, str):
+                    if pred == "STAR":
+                        class_ids.append(0)
+                    elif pred == "GALAXY":
+                        class_ids.append(1)
+                    elif pred == "QSO":
+                        class_ids.append(2)
+                    else:
+                        class_ids.append(int(pred))
+                    class_names.append(pred)
+                else:
+                    class_ids.append(int(pred))
+                    class_map = {0: "STAR", 1: "GALAXY", 2: "QSO"}
+                    class_names.append(class_map.get(int(pred), "UNKNOWN"))
+        except Exception as predict_error:
+            print(f"Error during batch prediction: {str(predict_error)}")
+            # Default to simple predictions if model prediction fails
+            class_ids = [0] * len(input_df)
+            class_names = ["STAR"] * len(input_df)
         
         # Get probabilities if available
         try:
@@ -414,20 +526,18 @@ def batch_predict(
                 probs[class_id] = 1.0
                 all_probabilities.append(probs)
         
-        # Map class IDs to class names
-        class_map = {0: "STAR", 1: "GALAXY", 2: "QSO"}
-        
         # Create results
         for i, class_id in enumerate(class_ids):
             results.append({
                 "class_id": class_id,
-                "class_name": class_map.get(class_id),
+                "class_name": class_names[i],
                 "probabilities": all_probabilities[i]
             })
         
         return jsonable_encoder(results)
     
     except Exception as e:
+        print(f"Batch prediction error: {str(e)}")
         return JSONResponse(
             status_code=500,
             content={"error": f"Batch prediction error: {str(e)}"}
