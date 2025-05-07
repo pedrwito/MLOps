@@ -1,6 +1,5 @@
 import datetime
 import logging
-from typing import Dict, Any
 
 from airflow.decorators import dag, task
 from airflow.models import Variable
@@ -9,8 +8,8 @@ from airflow.exceptions import AirflowException
 markdown_text = """
 ### EL Process for Star Classification
 
-This DAG extracts information from the original CSV file stored in the kaggle repository https://www.kaggle.com/datasets/fedesoriano/stellar-classification-dataset-sdss17.
-It extracts the data and stores it into an S3 bucket.
+This DAG processes the star classification data stored in S3 (Minio).
+It reads the data from raw bucket and performs feature selection and cleaning.
 """
 
 default_args = {
@@ -25,14 +24,14 @@ default_args = {
 # Common requirements for all tasks
 COMMON_REQUIREMENTS = [
     "awswrangler==3.6.0",
-    "pandas==2.1.0",
+    "pandas==1.5.3",
     "numpy==1.24.3",
-    "kaggle==1.5.16"
+    "boto3==1.34.0"
 ]
 
 @dag(
     dag_id="el_star_classification_data",
-    description="EL process for star classification data, retrieving it from kaggle and loading it into s3",
+    description="EL process for star classification data from S3",
     doc_md=markdown_text,
     tags=["EL", "Star Classification"],
     default_args=default_args,
@@ -45,50 +44,47 @@ def process_el_star_data():
         requirements=COMMON_REQUIREMENTS,
         system_site_packages=True
     )
-    def get_data() -> Dict[str, Any]:
+    def get_data():
         """
-        Load the raw data from kaggle repository
+        Load the raw data from S3
         """
         import awswrangler as wr
         import pandas as pd
-        import os
-        from kaggle.api.kaggle_api_extended import KaggleApi
+        import boto3
+        import logging
+        from airflow.models import Variable
+        from airflow.exceptions import AirflowException
         
         try:
             # Get configuration from Airflow variables
             s3_bucket = Variable.get("s3_bucket", "data")
-            raw_data_path = f"s3://{s3_bucket}/raw/star_classification.csv"
+            raw_data_path = f"s3://{s3_bucket}/star_classification.csv"
             
-            # Initialize Kaggle API
-            api = KaggleApi()
-            api.authenticate()
-            
-            # Download dataset
-            api.dataset_download_files(
-                'fedesoriano/stellar-classification-dataset-sdss17',
-                path='/tmp',
-                unzip=True
+            # Configure S3 endpoint for Minio
+            boto3_session = boto3.Session()
+            s3_client = boto3_session.client(
+                service_name='s3',
+                endpoint_url='http://minio:9000',
+                aws_access_key_id='minio',
+                aws_secret_access_key='minio123'
             )
             
-            # Read the downloaded CSV
-            dataframe = pd.read_csv('/tmp/star_classification.csv')
+            # Read directly from S3
+            dataframe = wr.s3.read_csv(
+                path=raw_data_path,
+                boto3_session=boto3_session
+            )
             
             # Basic data validation
             if dataframe.empty:
-                raise AirflowException("Downloaded dataset is empty")
+                raise AirflowException("Dataset is empty")
             
             required_columns = ['class', 'alpha', 'delta', 'u', 'g', 'r', 'i', 'z']
             missing_columns = [col for col in required_columns if col not in dataframe.columns]
             if missing_columns:
                 raise AirflowException(f"Missing required columns: {missing_columns}")
             
-            # Save to S3
-            wr.s3.to_csv(
-                df=dataframe,
-                path=raw_data_path,
-                index=False
-            )
-            
+            # Log success
             return {"status": "success", "rows": len(dataframe)}
             
         except Exception as e:
@@ -100,22 +96,38 @@ def process_el_star_data():
         requirements=COMMON_REQUIREMENTS,
         system_site_packages=True
     )
-    def remove_features() -> Dict[str, Any]:
+    def remove_features():
         """
         Removes useless features and performs data cleaning
         """
         import awswrangler as wr
         import pandas as pd
         import numpy as np
+        import boto3
+        import logging
+        from airflow.models import Variable
+        from airflow.exceptions import AirflowException
         
         try:
             # Get configuration from Airflow variables
             s3_bucket = Variable.get("s3_bucket", "data")
-            data_original_path = f"s3://{s3_bucket}/raw/star_classification.csv"
+            data_original_path = f"s3://{s3_bucket}/star_classification.csv"
             data_end_path = f"s3://{s3_bucket}/raw/star_classification_filtered.csv"
             
+            # Configure S3 endpoint for Minio
+            boto3_session = boto3.Session()
+            s3_client = boto3_session.client(
+                service_name='s3',
+                endpoint_url='http://minio:9000',
+                aws_access_key_id='minio',
+                aws_secret_access_key='minio123'
+            )
+            
             # Read data
-            data_raw = wr.s3.read_csv(data_original_path)
+            data_raw = wr.s3.read_csv(
+                path=data_original_path,
+                boto3_session=boto3_session
+            )
             
             # Remove unnecessary columns
             columns_to_remove = [
@@ -131,7 +143,8 @@ def process_el_star_data():
             wr.s3.to_csv(
                 df=data,
                 path=data_end_path,
-                index=False
+                index=False,
+                boto3_session=boto3_session
             )
             
             return {
